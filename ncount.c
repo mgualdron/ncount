@@ -57,18 +57,41 @@ static struct option long_options[] = {
 };
 
 
+/* Return the number of delimiters in a string */
+static unsigned int dcount(char *line, char *delim)
+{
+    int i  = 0;
+    int dc = 0;  // The delimiter count
+
+    int slen = strlen(line);
+    int dlen = strlen(delim);
+
+    char *p = line;
+
+    if ( slen >= dlen ) {
+        for ( i = 0; i <= (slen - dlen); i++ )
+        {
+            if ( strncmp(p + i, delim, dlen) == 0 )
+            {
+                dc++;
+            }
+        }
+    }
+
+    return dc;
+}
+
+
 /*
    Process a regular delimited file.
-   Output records not matching fieldcount.
+   Output records NOT matching fieldcount.
 */
 static int ncount(char *filename)
 {
     char *line = NULL;
-    char *copy = NULL;
     FILE *fp = NULL;
     size_t len = 0;         // allocated size for line
     ssize_t bytes_read = 0; // num of chars read
-    unsigned int fc = 0;
 
     if (filename[0] == '-') {
         fp = stdin;
@@ -81,21 +104,9 @@ static int ncount(char *filename)
 
     while ((bytes_read = getline(&line, &len, fp)) != -1) {
 
-        // strsep() will modify it's first argument, so we make a copy:
-        copy = strdup(line);
-
-        fc = 0;
-        char *p = strtok (line, delim);
-        while (p != NULL) {
-            fc++;
-            p = strtok (NULL, delim);
+        if ( fieldcount != (dcount(line, delim) + 1) ) {
+            printf("%s", line);
         }
-
-        if (fc != fieldcount) {
-            printf("%s", copy);
-        }
-
-        free(copy);
     }
 
     free(line);
