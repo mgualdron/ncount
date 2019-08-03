@@ -57,23 +57,14 @@ static struct option long_options[] = {
 };
 
 
-/* Remove trailing CR/LF */
-void chomp(char *s) {
-    while(*s && *s != '\n' && *s != '\r') s++;
- 
-    *s = 0;
-}
-
-
 /*
    Process a regular delimited file.
    Output records not matching fieldcount.
 */
-int ncount(char *filename)
+static int ncount(char *filename)
 {
     char *line = NULL;
     char *copy = NULL;
-    char *token = NULL;
     FILE *fp = NULL;
     size_t len = 0;         // allocated size for line
     ssize_t bytes_read = 0; // num of chars read
@@ -94,13 +85,16 @@ int ncount(char *filename)
         copy = strdup(line);
 
         fc = 0;
-        while ((token = strsep(&line, delim))) {
+        char *p = strtok (line, delim);
+        while (p != NULL) {
             fc++;
+            p = strtok (NULL, delim);
         }
 
         if (fc != fieldcount) {
             printf("%s", copy);
         }
+
         free(copy);
     }
 
