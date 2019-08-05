@@ -40,7 +40,9 @@ More than one FILE can be specified.\n\
       printf ("\
 \n\
   -d, --delimiter=DELIM  the delimiting character for the input FILE(s)\n\
-  -c, --field-count=FC   the field count to use while processing\n\
+  -c, --field-count=FC   the field count to use while processing (required)\n\
+  -l, --add-line         include the line number in the output\n\
+  -C, --add-count        include the field count in the output\n\
   -h, --help             This help\n\
 ");
     }
@@ -52,6 +54,8 @@ More than one FILE can be specified.\n\
 static struct option long_options[] = {
     {"delimiter",   required_argument, 0, 'd'},
     {"field-count", required_argument, 0, 'c'},
+    {"add-line",    no_argument      , 0, 'l'},
+    {"add-count",   no_argument      , 0, 'C'},
     {"help",        no_argument,       0, 'h'},
     {0, 0, 0, 0}
 };
@@ -111,6 +115,116 @@ error:
     return -1;
 }
 
+/* Version with line number added */
+static int ncount_line(char *filename)
+{
+    char *line = NULL;
+    FILE *fp = NULL;
+    size_t len = 0;         // allocated size for line
+    ssize_t bytes_read = 0; // num of chars read
+    const unsigned int dlen = strlen(delim);
+    unsigned int lnum = 0;
+
+    if (filename[0] == '-') {
+        fp = stdin;
+    }
+    else {
+        fp = fopen(filename, "rb");
+    }
+
+    check(fp != NULL, "Error opening file: %s.", filename);
+
+    while ((bytes_read = getline(&line, &len, fp)) != -1) {
+
+        lnum++;
+        if ( fieldcount != (dcount(line, delim, dlen) + 1) ) {
+            printf("%d:%s", lnum, line);
+        }
+    }
+
+    free(line);
+    fclose(fp);
+
+    return 0;
+
+error:
+    return -1;
+}
+
+/* Version with field count added */
+static int ncount_field(char *filename)
+{
+    char *line = NULL;
+    FILE *fp = NULL;
+    size_t len = 0;         // allocated size for line
+    ssize_t bytes_read = 0; // num of chars read
+    const unsigned int dlen = strlen(delim);
+    unsigned int fc = 0;
+
+    if (filename[0] == '-') {
+        fp = stdin;
+    }
+    else {
+        fp = fopen(filename, "rb");
+    }
+
+    check(fp != NULL, "Error opening file: %s.", filename);
+
+    while ((bytes_read = getline(&line, &len, fp)) != -1) {
+
+        fc = dcount(line, delim, dlen) + 1;
+        if ( fieldcount != fc ) {
+            printf("%d:%s", fc, line);
+        }
+    }
+
+    free(line);
+    fclose(fp);
+
+    return 0;
+
+error:
+    return -1;
+}
+
+/* Version with line num and field count added */
+static int ncount_line_field(char *filename)
+{
+    char *line = NULL;
+    FILE *fp = NULL;
+    size_t len = 0;         // allocated size for line
+    ssize_t bytes_read = 0; // num of chars read
+    const unsigned int dlen = strlen(delim);
+    unsigned int lnum = 0;
+    unsigned int fc = 0;
+
+    if (filename[0] == '-') {
+        fp = stdin;
+    }
+    else {
+        fp = fopen(filename, "rb");
+    }
+
+    check(fp != NULL, "Error opening file: %s.", filename);
+
+    while ((bytes_read = getline(&line, &len, fp)) != -1) {
+
+        lnum++;
+        fc = dcount(line, delim, dlen) + 1;
+        if ( fieldcount != fc ) {
+            printf("%d:%d:%s", lnum, fc, line);
+        }
+    }
+
+    free(line);
+    fclose(fp);
+
+    return 0;
+
+error:
+    return -1;
+}
+
 
 /* The main function */
 int main (int argc, char *argv[])
@@ -118,13 +232,15 @@ int main (int argc, char *argv[])
     int c;
     int delim_arg_flag = 0;
     int fieldcount_arg_flag = 0;
+    int add_lnum_arg_flag = 0;
+    int add_fc_arg_flag = 0;
 
     while (1) {
 
         // getopt_long stores the option index here.
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "hd:c:", long_options, &option_index);
+        c = getopt_long (argc, argv, "hlCd:c:", long_options, &option_index);
 
         // Detect the end of the options.
         if (c == -1) break;
@@ -144,6 +260,16 @@ int main (int argc, char *argv[])
                 debug("option -d with value `%s'", optarg);
                 delim_arg = optarg;
                 delim_arg_flag = 1;
+                break;
+
+            case 'l':
+                debug("option -l");
+                add_lnum_arg_flag = 1;
+                break;
+
+            case 'C':
+                debug("option -C");
+                add_fc_arg_flag = 1;
                 break;
 
             case 'h':
@@ -199,7 +325,18 @@ int main (int argc, char *argv[])
         debug("The filename is %s", filename);
 
         // Process the file:
-        check(ncount(filename) == 0, "Error processing file: %s", filename);
+        if (add_lnum_arg_flag && add_fc_arg_flag) {
+            check(ncount_line_field(filename) == 0, "Error processing file: %s", filename);
+        }
+        else if (add_fc_arg_flag) {
+            check(ncount_field(filename) == 0, "Error processing file: %s", filename);
+        }
+        else if (add_lnum_arg_flag) {
+            check(ncount_line(filename) == 0, "Error processing file: %s", filename);
+        }
+        else {
+            check(ncount(filename) == 0, "Error processing file: %s", filename);
+        }
 
         j++;
 

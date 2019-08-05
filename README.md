@@ -17,7 +17,7 @@ More than one FILE can be specified.
   -h, --help             This help
 ```
 
-## BUILD
+## Build
 
 Type the following within the source directory:
 
@@ -25,10 +25,10 @@ Type the following within the source directory:
 make ncount
 ```
 
-Copy the binary somewhere in your path, like:
+Move the binary somewhere in your path, like:
 
 ```
-cp ncount ~/bin
+mv ncount ~/bin
 ```
 
 ## Why?
@@ -42,7 +42,7 @@ real    1m59.619s
 user    1m58.566s
 sys     0m1.052s
 
-time ncount -c 19 50_million_row_file.tct
+time ncount -c 19 50_million_row_file.txt
 
 real    0m17.425s
 user    0m12.554s
@@ -52,5 +52,4 @@ sys     0m4.871s
 
 ## TODO
 
-- Optionally add the line number to each record in the output.
 - Support for CSV files.
