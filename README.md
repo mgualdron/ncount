@@ -13,7 +13,9 @@ Output records from a delimited file NOT matching the given field count.
 More than one FILE can be specified.
 
   -d, --delimiter=DELIM  the delimiting character for the input FILE(s)
-  -c, --field-count=FC   the field count to use while processing
+  -c, --field-count=FC   the field count to use while processing (required)
+  -l, --add-line         include the line number in the output
+  -C, --add-count        include the field count in the output
   -h, --help             This help
 ```
 
