@@ -5,17 +5,31 @@
 //                  the command-line.
 //
 // -------------------------------------------------------------------------
+#define _GNU_SOURCE //cause stdio.h to include vasprintf
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
 #include "util/dbg.h"
+#include <csv.h>
+
+#define Sasprintf(write_to, ...) {           \
+    char *tmp_string_to_extend = (write_to); \
+    asprintf(&(write_to), __VA_ARGS__);      \
+    free(tmp_string_to_extend);              \
+}
 
 static const char *program_name = "ncount";
 static unsigned int fieldcount = 0;
+static unsigned int running_fieldcount = 0;
+static unsigned int linecount = 0;
 static char *fieldcount_arg = 0;
 static char *delim_arg = "\t";
 static char *delim = "\t";
+static char delim_csv = CSV_COMMA;
+static char *quote_arg = NULL;
+static char quote = CSV_QUOTE;
+static char *output_rec = NULL;
 
 static void try_help (int status) {
     printf("Try '%s --help' for more information.\n", program_name);
@@ -43,6 +57,8 @@ More than one FILE can be specified.\n\
   -c, --field-count=FC   the field count to use while processing (required)\n\
   -l, --add-line         include the line number in the output\n\
   -C, --add-count        include the field count in the output\n\
+      --csv              parse CSV files\n\
+  -Q, --csv-quote        CSV quoting character (ignored unless --csv)\n\
   -h, --help             This help\n\
 ");
     }
@@ -56,6 +72,8 @@ static struct option long_options[] = {
     {"field-count", required_argument, 0, 'c'},
     {"add-line",    no_argument      , 0, 'l'},
     {"add-count",   no_argument      , 0, 'C'},
+    {"csv",       no_argument,       0, 'S'},
+    {"csv-quote", required_argument, 0, 'Q'},
     {"help",        no_argument,       0, 'h'},
     {0, 0, 0, 0}
 };
@@ -138,7 +156,7 @@ static int ncount_line(char *filename)
 
         lnum++;
         if ( fieldcount != (dcount(line, delim, dlen) + 1) ) {
-            printf("%d:%s", lnum, line);
+            printf("[rec:%d]%s%s", lnum, delim, line);
         }
     }
 
@@ -174,7 +192,7 @@ static int ncount_field(char *filename)
 
         fc = dcount(line, delim, dlen) + 1;
         if ( fieldcount != fc ) {
-            printf("%d:%s", fc, line);
+            printf("[fields:%d]%s%s", fc, delim, line);
         }
     }
 
@@ -212,11 +230,75 @@ static int ncount_line_field(char *filename)
         lnum++;
         fc = dcount(line, delim, dlen) + 1;
         if ( fieldcount != fc ) {
-            printf("%d:%d:%s", lnum, fc, line);
+            printf("[rec:%d]%s[fields:%d]%s%s", lnum, delim, fc, delim, line);
         }
     }
 
     free(line);
+    fclose(fp);
+
+    return 0;
+
+error:
+    return -1;
+}
+
+// Callback 1 for CSV support, called whenever a field is processed:
+void cb1 (void *s, size_t len, void *data)
+{
+    size_t fld_size;
+
+    running_fieldcount++;
+    if ( output_rec == NULL ) { output_rec = strdup(""); }
+    fld_size = csv_write2(NULL, 0, len ? s : "", len, quote) + 1;
+    char *out_temp = (char *)malloc(fld_size * sizeof(char));
+    csv_write2(out_temp, fld_size, len ? s : "", len, quote);
+    Sasprintf(output_rec, "%s%c%s", output_rec, delim_csv, out_temp);
+    free(out_temp);
+}
+
+// Callback 2 for CSV support, called whenever a record is processed:
+void cb2 (int c, void *data)
+{
+    linecount++;
+    if ( fieldcount != running_fieldcount ) {
+        printf("[rec:%d]%c[fields:%d]%s\n", linecount, delim_csv, running_fieldcount, output_rec);
+    }
+    running_fieldcount = 0;
+    free(output_rec);
+    output_rec = NULL;
+}
+
+int ncount_csv(char *filename)
+{
+    struct csv_parser p;
+    char buf[1024];
+    FILE *fp = NULL;
+    size_t bytes_read = 0; // num of chars read
+
+    if (filename[0] == '-') {
+        fp = stdin;
+    }
+    else {
+        fp = fopen(filename, "rb");
+    }
+
+    check(fp != NULL, "Error opening file: %s.", filename);
+
+    check(csv_init(&p, CSV_APPEND_NULL) == 0, "Error initializing CSV parser.");
+
+    // Set some parsing params:
+    csv_set_delim(&p, delim_csv);
+    csv_set_quote(&p, quote);
+
+    while ((bytes_read=fread(buf, 1, 1024, fp)) > 0) {
+        check(csv_parse(&p, buf, bytes_read, cb1, cb2, NULL) == bytes_read, "Error while parsing file: %s", csv_strerror(csv_error(&p)));
+    }
+
+    check(csv_fini(&p, cb1, cb2, NULL) == 0, "Error finishing CSV processing.");
+
+    csv_free(&p);
+
     fclose(fp);
 
     return 0;
@@ -234,6 +316,7 @@ int main (int argc, char *argv[])
     int fieldcount_arg_flag = 0;
     int add_lnum_arg_flag = 0;
     int add_fc_arg_flag = 0;
+    int csv_mode = 0;
 
     while (1) {
 
@@ -270,6 +353,18 @@ int main (int argc, char *argv[])
             case 'C':
                 debug("option -C");
                 add_fc_arg_flag = 1;
+                break;
+
+            case 'S':
+                debug("option -S");
+                csv_mode = 1;
+                break;
+
+            case 'Q':
+                debug("option -Q");
+                quote_arg = optarg;
+                check(strlen(quote_arg) == 1, "ERROR: CSV quoting character must be exactly one byte long");
+                quote = quote_arg[0];
                 break;
 
             case 'h':
@@ -325,17 +420,22 @@ int main (int argc, char *argv[])
         debug("The filename is %s", filename);
 
         // Process the file:
-        if (add_lnum_arg_flag && add_fc_arg_flag) {
-            check(ncount_line_field(filename) == 0, "Error processing file: %s", filename);
-        }
-        else if (add_fc_arg_flag) {
-            check(ncount_field(filename) == 0, "Error processing file: %s", filename);
-        }
-        else if (add_lnum_arg_flag) {
-            check(ncount_line(filename) == 0, "Error processing file: %s", filename);
+        if (csv_mode) {
+                check(ncount_csv(filename) == 0, "Error in CSV-mode processing of file: %s", filename);
         }
         else {
-            check(ncount(filename) == 0, "Error processing file: %s", filename);
+            if (add_lnum_arg_flag && add_fc_arg_flag) {
+                check(ncount_line_field(filename) == 0, "Error processing file: %s", filename);
+            }
+            else if (add_fc_arg_flag) {
+                check(ncount_field(filename) == 0, "Error processing file: %s", filename);
+            }
+            else if (add_lnum_arg_flag) {
+                check(ncount_line(filename) == 0, "Error processing file: %s", filename);
+            }
+            else {
+                check(ncount(filename) == 0, "Error processing file: %s", filename);
+            }
         }
 
         j++;
