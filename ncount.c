@@ -458,7 +458,7 @@ int main (int argc, char *argv[])
         fieldcount = (unsigned int) strtol(fieldcount_arg, (char **)NULL, 10);
     }
 
-    check(fieldcount > 0, "ERROR: Please specify a valid field count with -c");
+    check(fieldcount > 0, "ERROR: Please specify a valid field count with -n");
 
     int j = optind;  // A copy of optind (the number of options at the command-line),
                      // which is not the same as argc, as that counts ALL
