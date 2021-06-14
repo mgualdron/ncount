@@ -13,9 +13,11 @@ Output records from a delimited file NOT matching the given field count.
 More than one FILE can be specified.
 
   -d, --delimiter=DELIM  the delimiting character for the input FILE(s)
-  -c, --field-count=FC   the field count to use while processing (required)
+  -n, --field-count=FC   the field count to use while processing (required)
   -l, --add-line         include the line number in the output
-  -C, --add-count        include the field count in the output
+  -c, --add-count        include the field count in the output
+  -C  --csv              parse CSV files
+  -Q, --csv-quote        CSV quoting character (ignored unless --csv)
   -h, --help             This help
 ```
 
@@ -44,14 +46,9 @@ real    1m59.619s
 user    1m58.566s
 sys     0m1.052s
 
-time ncount -c 19 50_million_row_file.txt
+time ncount -n 19 50_million_row_file.txt
 
 real    0m17.425s
 user    0m12.554s
 sys     0m4.871s
 ```
-
-
-## TODO
-
-- Support for CSV files.
