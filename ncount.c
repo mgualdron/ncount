@@ -21,21 +21,20 @@
 
 static const char *program_name = "ncount";
 static unsigned int fieldcount = 0;
-static unsigned int running_fieldcount = 0;
-static unsigned int linecount = 0;
 static char *fieldcount_arg = 0;
 static char *delim_arg = "\t";
 static char *delim = "\t";
 static char delim_csv = CSV_COMMA;
 static char *quote_arg = NULL;
 static char quote = CSV_QUOTE;
-static char *output_rec = NULL;
+static int ignore_this = 0;
+
+typedef struct { unsigned int rcount; unsigned int fcount; char *record; } CSV_status;
 
 static void try_help (int status) {
     printf("Try '%s --help' for more information.\n", program_name);
     exit(status);
 }
-
 
 static void usage (int status) {
     if (status != 0) {
@@ -54,10 +53,10 @@ More than one FILE can be specified.\n\
       printf ("\
 \n\
   -d, --delimiter=DELIM  the delimiting character for the input FILE(s)\n\
-  -c, --field-count=FC   the field count to use while processing (required)\n\
+  -n, --field-count=FC   the field count to use while processing (required)\n\
   -l, --add-line         include the line number in the output\n\
-  -C, --add-count        include the field count in the output\n\
-      --csv              parse CSV files\n\
+  -c, --add-count        include the field count in the output\n\
+  -C  --csv              parse CSV files\n\
   -Q, --csv-quote        CSV quoting character (ignored unless --csv)\n\
   -h, --help             This help\n\
 ");
@@ -69,12 +68,12 @@ More than one FILE can be specified.\n\
 
 static struct option long_options[] = {
     {"delimiter",   required_argument, 0, 'd'},
-    {"field-count", required_argument, 0, 'c'},
+    {"field-count", required_argument, 0, 'n'},
     {"add-line",    no_argument      , 0, 'l'},
-    {"add-count",   no_argument      , 0, 'C'},
-    {"csv",       no_argument,       0, 'S'},
-    {"csv-quote", required_argument, 0, 'Q'},
-    {"help",        no_argument,       0, 'h'},
+    {"add-count",   no_argument      , 0, 'c'},
+    {"csv",         no_argument      , 0, 'C'},
+    {"csv-quote",   required_argument, 0, 'Q'},
+    {"help",        no_argument      , 0, 'h'},
     {0, 0, 0, 0}
 };
 
@@ -247,26 +246,84 @@ error:
 void cb1 (void *s, size_t len, void *data)
 {
     size_t fld_size;
+    char *fld = (char *)s;
+    CSV_status *csv_track = (CSV_status *)data;
 
-    running_fieldcount++;
-    if ( output_rec == NULL ) { output_rec = strdup(""); }
-    fld_size = csv_write2(NULL, 0, len ? s : "", len, quote) + 1;
+    csv_track->fcount++;
+    if ( csv_track->record == NULL ) { csv_track->record = strdup(""); }
+    fld_size = csv_write2(NULL, 0, len ? fld : "", len, quote);
     char *out_temp = (char *)malloc(fld_size * sizeof(char));
-    csv_write2(out_temp, fld_size, len ? s : "", len, quote);
-    Sasprintf(output_rec, "%s%c%s", output_rec, delim_csv, out_temp);
+    csv_write2(out_temp, fld_size, len ? fld : "", len, quote);
+    out_temp[fld_size] = '\0';  // NUL-terminate the written field
+    Sasprintf(csv_track->record, "%s%c%s", csv_track->record, delim_csv, out_temp);
     free(out_temp);
 }
 
+// A function pointer to one of the cb2 functions below:
+void (*cb2) (int, void *);
+
 // Callback 2 for CSV support, called whenever a record is processed:
-void cb2 (int c, void *data)
+void cb2_none (int c, void *data)
 {
-    linecount++;
-    if ( fieldcount != running_fieldcount ) {
-        printf("[rec:%d]%c[fields:%d]%s\n", linecount, delim_csv, running_fieldcount, output_rec);
+    CSV_status *csv_track = (CSV_status *)data;
+
+    csv_track->rcount++;
+    if ( fieldcount != csv_track->fcount ) {
+        printf("%s\n", csv_track->record);
     }
-    running_fieldcount = 0;
-    free(output_rec);
-    output_rec = NULL;
+
+    csv_track->fcount = 0;
+    free(csv_track->record);
+    csv_track->record = NULL;
+    ignore_this = c;
+}
+
+// Callback 2 for CSV support, called whenever a record is processed:
+void cb2_line (int c, void *data)
+{
+    CSV_status *csv_track = (CSV_status *)data;
+
+    csv_track->rcount++;
+    if ( fieldcount != csv_track->fcount ) {
+        printf("[rec:%d]%s\n", csv_track->rcount, csv_track->record);
+    }
+
+    csv_track->fcount = 0;
+    free(csv_track->record);
+    csv_track->record = NULL;
+    ignore_this = c;
+}
+
+// Callback 2 for CSV support, called whenever a record is processed:
+void cb2_field (int c, void *data)
+{
+    CSV_status *csv_track = (CSV_status *)data;
+
+    csv_track->rcount++;
+    if ( fieldcount != csv_track->fcount ) {
+        printf("[fields:%d]%s\n", csv_track->fcount, csv_track->record);
+    }
+
+    csv_track->fcount = 0;
+    free(csv_track->record);
+    csv_track->record = NULL;
+    ignore_this = c;
+}
+
+// Callback 2 for CSV support, called whenever a record is processed:
+void cb2_line_field (int c, void *data)
+{
+    CSV_status *csv_track = (CSV_status *)data;
+
+    csv_track->rcount++;
+    if ( fieldcount != csv_track->fcount ) {
+        printf("[rec:%d]%c[fields:%d]%s\n", csv_track->rcount, delim_csv, csv_track->fcount, csv_track->record);
+    }
+
+    csv_track->fcount = 0;
+    free(csv_track->record);
+    csv_track->record = NULL;
+    ignore_this = c;
 }
 
 int ncount_csv(char *filename)
@@ -275,6 +332,11 @@ int ncount_csv(char *filename)
     char buf[1024];
     FILE *fp = NULL;
     size_t bytes_read = 0; // num of chars read
+    CSV_status *csv_track = (CSV_status *)malloc(sizeof(CSV_status));
+
+    csv_track->rcount = 0;
+    csv_track->fcount = 0;
+    csv_track->record = NULL;
 
     if (filename[0] == '-') {
         fp = stdin;
@@ -292,12 +354,13 @@ int ncount_csv(char *filename)
     csv_set_quote(&p, quote);
 
     while ((bytes_read=fread(buf, 1, 1024, fp)) > 0) {
-        check(csv_parse(&p, buf, bytes_read, cb1, cb2, NULL) == bytes_read, "Error while parsing file: %s", csv_strerror(csv_error(&p)));
+        check(csv_parse(&p, buf, bytes_read, cb1, cb2, csv_track) == bytes_read, "Error while parsing file: %s", csv_strerror(csv_error(&p)));
     }
 
-    check(csv_fini(&p, cb1, cb2, NULL) == 0, "Error finishing CSV processing.");
+    check(csv_fini(&p, cb1, cb2, csv_track) == 0, "Error finishing CSV processing.");
 
     csv_free(&p);
+    free(csv_track);
 
     fclose(fp);
 
@@ -323,7 +386,7 @@ int main (int argc, char *argv[])
         // getopt_long stores the option index here.
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "hlCd:c:", long_options, &option_index);
+        c = getopt_long (argc, argv, "hlCcd:n:", long_options, &option_index);
 
         // Detect the end of the options.
         if (c == -1) break;
@@ -333,8 +396,8 @@ int main (int argc, char *argv[])
                 // If this option set a flag, do nothing else now.
                 break;
 
-            case 'c':
-                debug("option -c with value `%s'", optarg);
+            case 'n':
+                debug("option -n with value `%s'", optarg);
                 fieldcount_arg      = optarg;
                 fieldcount_arg_flag = 1;
                 break;
@@ -350,13 +413,13 @@ int main (int argc, char *argv[])
                 add_lnum_arg_flag = 1;
                 break;
 
-            case 'C':
-                debug("option -C");
+            case 'c':
+                debug("option -c");
                 add_fc_arg_flag = 1;
                 break;
 
-            case 'S':
-                debug("option -S");
+            case 'C':
+                debug("option -C");
                 csv_mode = 1;
                 break;
 
@@ -421,7 +484,19 @@ int main (int argc, char *argv[])
 
         // Process the file:
         if (csv_mode) {
-                check(ncount_csv(filename) == 0, "Error in CSV-mode processing of file: %s", filename);
+            if (add_lnum_arg_flag && add_fc_arg_flag) {
+                cb2 = cb2_line_field;
+            }
+            else if (add_fc_arg_flag) {
+                cb2 = cb2_field;
+            }
+            else if (add_lnum_arg_flag) {
+                cb2 = cb2_line;
+            }
+            else {
+                cb2 = cb2_none;
+            }
+            check(ncount_csv(filename) == 0, "Error in CSV-mode processing of file: %s", filename);
         }
         else {
             if (add_lnum_arg_flag && add_fc_arg_flag) {
