@@ -252,7 +252,7 @@ void cb1 (void *s, size_t len, void *data)
     csv_track->fcount++;
     if ( csv_track->record == NULL ) { csv_track->record = strdup(""); }
     fld_size = csv_write2(NULL, 0, len ? fld : "", len, quote);
-    char *out_temp = (char *)malloc(fld_size * sizeof(char));
+    char *out_temp = (char *)malloc((fld_size + 1) * sizeof(char));
     csv_write2(out_temp, fld_size, len ? fld : "", len, quote);
     out_temp[fld_size] = '\0';  // NUL-terminate the written field
     Sasprintf(csv_track->record, "%s%c%s", csv_track->record, delim_csv, out_temp);
