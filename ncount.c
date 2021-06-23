@@ -250,12 +250,17 @@ void cb1 (void *s, size_t len, void *data)
     CSV_status *csv_track = (CSV_status *)data;
 
     csv_track->fcount++;
-    if ( csv_track->record == NULL ) { csv_track->record = strdup(""); }
     fld_size = csv_write2(NULL, 0, len ? fld : "", len, quote);
     char *out_temp = (char *)malloc((fld_size + 1) * sizeof(char));
     csv_write2(out_temp, fld_size, len ? fld : "", len, quote);
     out_temp[fld_size] = '\0';  // NUL-terminate the written field
-    Sasprintf(csv_track->record, "%s%c%s", csv_track->record, delim_csv, out_temp);
+    if ( csv_track->record == NULL ) {
+        //csv_track->record = strdup("");
+        Sasprintf(csv_track->record, "%s", out_temp);
+    }
+    else {
+        Sasprintf(csv_track->record, "%s%c%s", csv_track->record, delim_csv, out_temp);
+    }
     free(out_temp);
 }
 
@@ -285,7 +290,7 @@ void cb2_line (int c, void *data)
 
     csv_track->rcount++;
     if ( fieldcount != csv_track->fcount ) {
-        printf("[rec:%d]%s\n", csv_track->rcount, csv_track->record);
+        printf("[rec:%d]%c%s\n", csv_track->rcount, delim_csv, csv_track->record);
     }
 
     csv_track->fcount = 0;
@@ -301,7 +306,7 @@ void cb2_field (int c, void *data)
 
     csv_track->rcount++;
     if ( fieldcount != csv_track->fcount ) {
-        printf("[fields:%d]%s\n", csv_track->fcount, csv_track->record);
+        printf("[fields:%d]%c%s\n", csv_track->fcount, delim_csv, csv_track->record);
     }
 
     csv_track->fcount = 0;
@@ -317,7 +322,7 @@ void cb2_line_field (int c, void *data)
 
     csv_track->rcount++;
     if ( fieldcount != csv_track->fcount ) {
-        printf("[rec:%d]%c[fields:%d]%s\n", csv_track->rcount, delim_csv, csv_track->fcount, csv_track->record);
+        printf("[rec:%d]%c[fields:%d]%c%s\n", csv_track->rcount, delim_csv, csv_track->fcount, delim_csv, csv_track->record);
     }
 
     csv_track->fcount = 0;
@@ -450,7 +455,11 @@ int main (int argc, char *argv[])
         }
     }
 
-    if (delim_arg_flag) {
+    if (csv_mode && delim_arg_flag) {
+        check(strlen(delim_arg) == 1, "ERROR: CSV delimiter must be exactly one byte long");
+        delim_csv = delim_arg[0];
+    }
+    else if (!csv_mode && delim_arg_flag) {
         delim = delim_arg;
     }
 
