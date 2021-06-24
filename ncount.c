@@ -12,6 +12,7 @@
 #include <string.h>
 #include "util/dbg.h"
 #include <csv.h>
+#define NUL_REPLACEMENT_CHARACTER 63   // This is a '?'
 
 #define Sasprintf(write_to, ...) {           \
     char *tmp_string_to_extend = (write_to); \
@@ -78,12 +79,22 @@ static struct option long_options[] = {
 };
 
 
+static void replace_nulls(char *line, ssize_t bytes_read)
+{
+    for (ssize_t i = 0; i < bytes_read; i++) {
+        if ( line[i] == 0 ) { line[i] = NUL_REPLACEMENT_CHARACTER; }
+    }
+}
+
+
 /* Return the number of delimiters in a string */
-static unsigned int dcount(char *line, char *delim, const int dlen)
+static unsigned int dcount(char *line, char *delim, const int dlen, ssize_t bytes_read)
 {
     int dc = 0;  // The delimiter count
-
     char *p = line;
+
+    // A smaller strlen tells us we have NULs in the line string:
+    if ( strlen(line) < (size_t)bytes_read ) { replace_nulls(line, bytes_read); }
 
     while((p = strstr(p, delim)))
     {
@@ -118,7 +129,7 @@ static int ncount(char *filename)
 
     while ((bytes_read = getline(&line, &len, fp)) != -1) {
 
-        if ( fieldcount != (dcount(line, delim, dlen) + 1) ) {
+        if ( fieldcount != (dcount(line, delim, dlen, bytes_read) + 1) ) {
             printf("%s", line);
         }
     }
@@ -154,7 +165,7 @@ static int ncount_line(char *filename)
     while ((bytes_read = getline(&line, &len, fp)) != -1) {
 
         lnum++;
-        if ( fieldcount != (dcount(line, delim, dlen) + 1) ) {
+        if ( fieldcount != (dcount(line, delim, dlen, bytes_read) + 1) ) {
             printf("[rec:%d]%s%s", lnum, delim, line);
         }
     }
@@ -189,7 +200,7 @@ static int ncount_field(char *filename)
 
     while ((bytes_read = getline(&line, &len, fp)) != -1) {
 
-        fc = dcount(line, delim, dlen) + 1;
+        fc = dcount(line, delim, dlen, bytes_read) + 1;
         if ( fieldcount != fc ) {
             printf("[fields:%d]%s%s", fc, delim, line);
         }
@@ -227,7 +238,7 @@ static int ncount_line_field(char *filename)
     while ((bytes_read = getline(&line, &len, fp)) != -1) {
 
         lnum++;
-        fc = dcount(line, delim, dlen) + 1;
+        fc = dcount(line, delim, dlen, bytes_read) + 1;
         if ( fieldcount != fc ) {
             printf("[rec:%d]%s[fields:%d]%s%s", lnum, delim, fc, delim, line);
         }
@@ -249,13 +260,14 @@ void cb1 (void *s, size_t len, void *data)
     char *fld = (char *)s;
     CSV_status *csv_track = (CSV_status *)data;
 
+    if ( strlen(fld) < len ) { replace_nulls(fld, (ssize_t)len); }
+
     csv_track->fcount++;
     fld_size = csv_write2(NULL, 0, len ? fld : "", len, quote);
     char *out_temp = (char *)malloc((fld_size + 1) * sizeof(char));
     csv_write2(out_temp, fld_size, len ? fld : "", len, quote);
     out_temp[fld_size] = '\0';  // NUL-terminate the written field
     if ( csv_track->record == NULL ) {
-        //csv_track->record = strdup("");
         Sasprintf(csv_track->record, "%s", out_temp);
     }
     else {
