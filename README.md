@@ -18,6 +18,7 @@ More than one FILE can be specified.
   -c, --add-count        include the field count in the output
   -C  --csv              parse CSV files
   -Q, --csv-quote        CSV quoting character (ignored unless --csv)
+  -N, --csv-nl-count     output CSV records with embedded newlines
   -h, --help             This help
 ```
 
