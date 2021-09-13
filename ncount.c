@@ -59,6 +59,7 @@ More than one FILE can be specified.\n\
   -c, --add-count        include the field count in the output\n\
   -C  --csv              parse CSV files\n\
   -Q, --csv-quote        CSV quoting character (ignored unless --csv)\n\
+  -N, --csv-nl-count     output CSV records with embedded newlines\n\
   -h, --help             This help\n\
 ");
     }
@@ -74,6 +75,7 @@ static struct option long_options[] = {
     {"add-count",   no_argument      , 0, 'c'},
     {"csv",         no_argument      , 0, 'C'},
     {"csv-quote",   required_argument, 0, 'Q'},
+    {"csv-nl-count",no_argument      , 0, 'N'},
     {"help",        no_argument      , 0, 'h'},
     {0, 0, 0, 0}
 };
@@ -84,6 +86,15 @@ static void replace_nulls(char *line, ssize_t bytes_read)
     for (ssize_t i = 0; i < bytes_read; i++) {
         if ( line[i] == 0 ) { line[i] = NUL_REPLACEMENT_CHARACTER; }
     }
+}
+
+static unsigned int newline_count(char *line)
+{
+    unsigned int retval = 0;
+    for (size_t i = 0; i < strlen(line); i++) {
+        if ( line[i] == 10 ) { retval++; }
+    }
+    return retval;
 }
 
 
@@ -296,6 +307,23 @@ void cb2_none (int c, void *data)
 }
 
 // Callback 2 for CSV support, called whenever a record is processed:
+void cb2_none_nl (int c, void *data)
+{
+    CSV_status *csv_track = (CSV_status *)data;
+
+    csv_track->rcount++;
+    unsigned int nlcount = newline_count(csv_track->record);
+    if ( nlcount > 0 ) {
+        printf("[rec:%d]%c[nl:%d]%c%s\n", csv_track->rcount, delim_csv, nlcount, delim_csv, csv_track->record);
+    }
+
+    csv_track->fcount = 0;
+    free(csv_track->record);
+    csv_track->record = NULL;
+    ignore_this = c;
+}
+
+// Callback 2 for CSV support, called whenever a record is processed:
 void cb2_line (int c, void *data)
 {
     CSV_status *csv_track = (CSV_status *)data;
@@ -397,13 +425,14 @@ int main (int argc, char *argv[])
     int add_lnum_arg_flag = 0;
     int add_fc_arg_flag = 0;
     int csv_mode = 0;
+    int nl_mode = 0;
 
     while (1) {
 
         // getopt_long stores the option index here.
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "hlCcd:n:", long_options, &option_index);
+        c = getopt_long (argc, argv, "hlCcNd:n:", long_options, &option_index);
 
         // Detect the end of the options.
         if (c == -1) break;
@@ -447,6 +476,11 @@ int main (int argc, char *argv[])
                 quote = quote_arg[0];
                 break;
 
+            case 'N':
+                debug("option -N");
+                nl_mode = 1;
+                break;
+
             case 'h':
                 debug("option -h");
                 usage(0);
@@ -479,7 +513,7 @@ int main (int argc, char *argv[])
         fieldcount = (unsigned int) strtol(fieldcount_arg, (char **)NULL, 10);
     }
 
-    check(fieldcount > 0, "ERROR: Please specify a valid field count with -n");
+    check((fieldcount > 0 || (csv_mode && nl_mode)), "ERROR: Please specify a valid field count with -n");
 
     int j = optind;  // A copy of optind (the number of options at the command-line),
                      // which is not the same as argc, as that counts ALL
@@ -505,7 +539,10 @@ int main (int argc, char *argv[])
 
         // Process the file:
         if (csv_mode) {
-            if (add_lnum_arg_flag && add_fc_arg_flag) {
+            if (nl_mode) {
+                cb2 = cb2_none_nl;
+            }
+            else if (add_lnum_arg_flag && add_fc_arg_flag) {
                 cb2 = cb2_line_field;
             }
             else if (add_fc_arg_flag) {
