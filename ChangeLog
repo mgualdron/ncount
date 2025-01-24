@@ -1,0 +1,18 @@
+2021-09-13: Added info about new -N option.
+2021-09-13: Added new -N (--csv-nl-count) option to output lines containing embedded newlines in --csv mode.
+2021-06-24: Added better handling of embedded NUL characters.
+2021-06-23: Fixed a bug where the delimiter setting was not being honored in csv_mode.  Also corrected starting delimiter when outputting CSV records.
+2021-06-14: Added one to the size of each field to account for the terminating '\0'.
+2021-06-14: Minor update to error message.
+2021-06-14: Updated documentation with latest options.
+2021-06-14: Full CSV support, plus redefined some command-line options.
+2021-06-11: Added support for CSV files.
+2021-06-11: Added binary.
+2021-06-11: Added static linking to libcsv.a.
+2019-08-05: Documentation for -l and -C options.
+2019-08-05: Added -l and -C options to add the line number and/or field count to the output.
+2019-08-03: Performance improvement by switching to strstr().
+2019-08-03: Better support for compund delimiter.
+2019-08-02: Switched from strsep() to strtok() to support compound delimiters.
+2019-08-02: Initial commit.
+2019-08-02: Initial commit
