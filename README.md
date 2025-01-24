@@ -1,4 +1,5 @@
 # ncount
+![build status](https://github.com/mgualdron/ncount/actions/workflows/c-cpp.yml/badge.svg)
 
 ## Synopsis
 
@@ -22,18 +23,48 @@ More than one FILE can be specified.
   -h, --help             This help
 ```
 
-## Build
+## Building ncount
 
-Type the following within the source directory:
+The following projects have made `ncount` possible:
+
+- [libcsv](https://github.com/rgamble/libcsv) - Version 3.0.3 of `libcsv` is included with `ncount`.
+- [gnulib](https://www.gnu.org/software/gnulib/) - The `getline` module is included with `ncount` for portability.
+
+Please consider contributing to those projects if you find `ncount` useful.
+
+Note that this git repository does not include a `configure` script like a 
+distribution tarball normally does.  If you don't want to bother with 
+installing `autoconf` and `automake`, then download a distribution
+[package](https://github.com/mgualdron/ncount/releases/download/v0.0.1/ncount-0.0.1.tar.gz)
+and run `configure`:
 
 ```
-make ncount
+./configure
 ```
 
-Move the binary somewhere in your path, like:
+If you want the `ncount` binary installed in your `$HOME/bin`, you should 
+run something like:
 
 ```
-mv ncount ~/bin
+./configure --prefix=$HOME
+```
+
+If you're building from a copy of this git repository, you'll need to have 
+`autoconf` and `automake` installed on your system, and run the following 
+command to generate a `configure` script:
+
+```
+autoreconf -i
+```
+
+...and subsequently run `configure` as mentioned before.
+
+After `configure` completes successfully, you can do the usual:
+
+```
+make
+make check
+make install
 ```
 
 ## Why?
@@ -53,3 +84,7 @@ real    0m17.425s
 user    0m12.554s
 sys     0m4.871s
 ```
+
+## Author
+
+Miguel Gualdron (dev at gualdron.com).
